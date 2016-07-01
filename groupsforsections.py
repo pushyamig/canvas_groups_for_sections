@@ -2,70 +2,180 @@ import json
 import sys
 import logging
 import requests
-import urllib
 import utils
+from canvasapis import GroupsForSections
 import yaml
 from os.path import basename
 
-AUTHORIZATION = 'Authorization'
-BEARER = 'Bearer '
-MIME_TYPE_JSON = 'application/json'
-CONTENT_TYPE = 'Content-type'
 CONST_CANVAS = 'canvas'
 CONST_COURSE = 'course'
 CONST_TOKEN = 'token'
 CONST_URL = 'url'
 CONST_ID = 'id'
 CONST_GRP_CAT_NAME = 'group_category_name'
-HTTP_METHOD_POST = 'Post'
-HTTP_METHOD_GET = 'Get'
 
 
-def create_group_category():
-    logging.debug('create_group_category() Called')
+def create_group_category(group_category_name, groups_for_section, course_id):
+    """
+    The call creating the group category in a course, parse the Json, exception handling
+    :param group_category_name:
+    :param groups_for_section:
+    :param course_id
+    :type group_category_name: str
+    :type groups_for_section: GroupsForSections
+    :type course_id: str
+    :return: group category id
+    :rtype: str, None
+    """
+    try:
+        response = groups_for_section.create_group_category(group_category_name, course_id)
 
-    url = canvas_url + '/api/v1/courses/' + course_id + '/group_categories?name=' + urllib.quote_plus(
-            group_category_name)
-    response = api_handler(url, HTTP_METHOD_POST)
-    if response is None:
-        logging.error('Api call for \'creating group categories\' is not successful')
-        sys.exit(1)
+    except requests.exceptions.RequestException as e:
+        logging.exception('creating a group categories has erroneous response ' + e.message)
+        return
 
+    if not handle_request_if_failed(response):
+        return
+
+    group_category = json.loads(response.text)
+
+    return str(group_category['id'])
+
+
+def get_sections_for_course(sections_dict, groups_for_section, course_id, next_page_url=None):
+    """
+    getting all the section for a  course,  paginates if needed, parse the json, do the exception handling.
+    :param sections_dict:
+    :param groups_for_section:
+    :param course_id
+    :param next_page_url:
+    :type sections_dict: dict
+    :type groups_for_section: GroupsForSections
+    :type course_id:str
+    :type next_page_url: str
+    :return: sections = {name, id}
+    :rtype: dict, None
+    """
+    logging.debug(get_sections_for_course.__name__ + '() called')
+
+    try:
+        response = groups_for_section.sections_for_course(course_id, next_page_url)
+
+    except requests.exceptions.RequestException as e:
+        logging.exception('getting sections has erroneous response ' + e.message)
+        return
+
+    if not handle_request_if_failed(response):
+        return
+
+    section_list = json.loads(response.text)
+
+    if not section_list:
+        return sections_dict
+
+    for section in section_list:
+        sections_dict[section['id']] = section['name']
+
+    next_page_url = groups_for_section.get_next_page_url(response)
+    if next_page_url is not None:
+        get_sections_for_course(sections_dict, groups_for_section, course_id, next_page_url)
+
+    return sections_dict
+
+
+def get_users_in_section(groups_for_section, users_in_section, section_id=None, next_page_url=None):
+    """
+    get all the users in the sections, paginates, parse Json,  exception handling.
+
+    :param groups_for_section:
+    :param users_in_section:
+    :param section_id:
+    :param next_page_url:
+    :type groups_for_section: GroupsForSections
+    :type users_in_section: list
+    :type section_id: str
+    :type next_page_url: str
+    :return: users[id]
+    :rtype: list, None
+    """
+    logging.debug(get_users_in_section.__name__ + '() called')
+    try:
+        response = groups_for_section.users_in_section(section_id, next_page_url)
+
+    except requests.exceptions.RequestException as e:
+        logging.exception('getting USERS list has erroneous response ' + e.message)
+        return
+
+    if not handle_request_if_failed(response):
+        return
+
+    user_list = json.loads(response.text)
+
+    for user in user_list:
+        users_in_section.append(user['user_id'])
+
+    next_page_url = groups_for_section.get_next_page_url(response)
+    if next_page_url is not None:
+        get_users_in_section(groups_for_section, users_in_section, None, next_page_url)
+
+    return users_in_section
+
+
+def create_group(groups_for_section, group_category_id, group_name, course_id):
+    """
+    creates a group with name same as section name, parses Json, do exception handling
+    :param groups_for_section:
+    :param group_category_id:
+    :param group_name:
+    :param course_id:
+    :type groups_for_section: GroupsForSections
+    :type group_category_id: str
+    :type group_name: str
+    :type course_id: str
+    :return: group_id
+    :rtype str, None
+    """
+    logging.debug(create_group.__name__ + '() called')
+    try:
+        response = groups_for_section.create_group(group_category_id, group_name, course_id)
+    except requests.exceptions.RequestException as e:
+        logging.exception('creating a GROUP has erroneous response ' + e.message)
+        return None
+
+    if not handle_request_if_failed(response):
+        return
+
+    group = json.loads(response.text)
+    return str(group['id'])
+
+
+def handle_request_if_failed(response):
     if response.status_code != requests.codes.ok:
         error_msg_handler(response)
-        sys.exit(1)
-    group_category = json.loads(response.text)
-    return group_category['id']
-
-
-def api_handler(url, request_type):
-    logging.debug('api_handler() called')
-    logging.info('Api Request URL: ' + url)
-    response = None
-    headers = {CONTENT_TYPE: MIME_TYPE_JSON, AUTHORIZATION: BEARER + canvas_token}
-    try:
-        if request_type == HTTP_METHOD_GET:
-            response = requests.get(url, headers=headers)
-        elif request_type == HTTP_METHOD_POST:
-            response = requests.post(url, headers=headers)
-    except requests.exceptions.RequestException as e:
-        logging.exception(api_handler.__name__ + ' has some erroneous response ' + e.message)
-
-    return response
+        return False
+    else:
+        return True
 
 
 def error_msg_handler(response):
-    # using yaml instead of json.load to get the error message as logs  will show non unicode values in logs
-    # for eg., [{u'message': u'Invalid access token.'}] ---> [{'message': 'Invalid access token.'}]
-
-    error_res = yaml.safe_load(response.text)
-    logging.error('Api response has some errors: ' + str(error_res['errors']) + ' and Response Code: ' + str(
-            response.status_code))
+    """
+    Parsing the error json response. Using yaml instead of json.load to get the error message as logs will show non
+    unicode values for eg., [{u'message': u'Invalid access token.'}] ---> [{'message': 'Invalid access token.'}]
+    :param response:
+    :type requests
+    :return: nothing
+    """
+    try:
+        error_res = yaml.safe_load(response.text)
+    except Exception as exp:
+        logging.exception('Api error response is not in Json format and Response Code: ' + str(
+                response.status_code) + exp.message)
+    else:
+        logging.error('Api response has some errors: ' + str(error_res['errors']) + ' and Response Code: ' + str(
+                response.status_code))
 
 
 def main():
-    global course_id, group_category_name, canvas_token, canvas_url
-
     utils.setup_logging()
     logging.info('Script Started')
     logging.debug('args: ' + str(sys.argv))
@@ -105,8 +215,49 @@ def main():
     logging.info('Canvas URL: ' + canvas_url)
     logging.info('Course Id: ' + course_id)
     logging.info('Group Category Name: ' + group_category_name)
-    group_category_id = create_group_category()
-    logging.info('end of the script')
+
+    # instantiating the class
+    groups_for_section_class = GroupsForSections(canvas_token, canvas_url)
+    groups_to_users_dict = {}
+
+    group_category_id = create_group_category(group_category_name, groups_for_section_class, course_id)
+
+    if group_category_id is None:
+        logging.error('Group category "%s" is not created for course %s ' %(group_category_name, course_id))
+        sys.exit(1)
+
+    sections = get_sections_for_course({}, groups_for_section_class, course_id)
+
+    if sections is None or not sections:
+        logging.error('No sections in the course or error in getting sections for the course: ' + course_id)
+        sys.exit(1)
+
+    logging.info(
+        'Total # of sections that are in course %s are %d and are %s ' % (course_id, len(sections), sections.keys()))
+    for section_id in sections:
+        users = get_users_in_section(groups_for_section_class, [], str(section_id))
+
+        if users is None:
+            logging.error('Could not get users in section %s(%s): ' % (section_id, sections[section_id]))
+            sys.exit(1)
+
+        logging.info('section %s (%s) has %s users : ' % (section_id, sections[section_id], str(len(users))))
+
+        # creating one group for each section in course.
+        group_id = create_group(groups_for_section_class, str(group_category_id), sections[section_id], course_id)
+
+        if group_id is None:
+            logging.error('Could not create group for section %s(%s): ' % (section_id, sections[section_id]))
+            sys.exit(1)
+
+        logging.info('The Group id %s created for the Section %s with name %s'
+                     % (str(group_id), section_id, sections[section_id]))
+
+        # mapping all the users in a sections to corresponding group
+        groups_to_users_dict[group_id] = users
+        # TODO: Adding users to corresponding groups
+
+    logging.info('script ran successfully')
 
 
 if __name__ == '__main__':
