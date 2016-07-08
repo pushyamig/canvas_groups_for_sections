@@ -1,6 +1,3 @@
-canvas:
-  token: erf 
-  url: https://umich.test.instructure.com
 course:
   id: '1060'
   group_category_name: test 005
