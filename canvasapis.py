@@ -110,6 +110,23 @@ class GroupsForSections:
 
         return response
 
+    def add_users_to_group(self, group_id, user_id):
+        """
+        Adds user to a group, in case of exceptions it throws it to calling method
+        :param group_id:
+        :param user_id:
+        :type group_id: str
+        :type user_id: str
+        :return: response
+        :rtype: requests
+        """
+        url = self.canvas_url + '/api/v1/groups/' + group_id + '/memberships?user_id='+user_id
+        try:
+            response = self.make_api_call(url, self.HTTP_METHOD_POST)
+        except:
+            raise
+        return response
+
     def get_next_page_url(self, response):
         """
         get the next page url from the Http response headers
@@ -169,7 +186,7 @@ class GroupsForSections:
                 logging.info('Link headers: ' + str(response.links))
             elif request_type == self.HTTP_METHOD_POST:
                 response = requests.post(url, headers=headers)
-        except requests.exceptions.RequestException as request_exception:
-            raise request_exception
+        except (requests.exceptions.RequestException, Exception) as exception:
+            raise exception
 
         return response
