@@ -6,6 +6,7 @@ import utils
 from canvasapis import GroupsForSections
 import yaml
 from os.path import basename
+from collections import defaultdict
 
 CONST_CANVAS = 'canvas'
 CONST_COURSE = 'course'
@@ -30,12 +31,12 @@ def create_group_category(group_category_name, groups_for_section, course_id):
     try:
         response = groups_for_section.create_group_category(group_category_name, course_id)
 
-    except requests.exceptions.RequestException as e:
+    except (requests.exceptions.RequestException, Exception) as e:
         logging.exception('creating a group categories has erroneous response ' + e.message)
-        return
+        return None
 
     if not handle_request_if_failed(response):
-        return
+        return None
 
     group_category = json.loads(response.text)
 
@@ -61,12 +62,12 @@ def get_sections_for_course(sections_dict, groups_for_section, course_id, next_p
     try:
         response = groups_for_section.sections_for_course(course_id, next_page_url)
 
-    except requests.exceptions.RequestException as e:
+    except (requests.exceptions.RequestException, Exception) as e:
         logging.exception('getting sections has erroneous response ' + e.message)
-        return
+        return None
 
     if not handle_request_if_failed(response):
-        return
+        return None
 
     section_list = json.loads(response.text)
 
@@ -102,12 +103,12 @@ def get_users_in_section(groups_for_section, users_in_section, section_id=None, 
     try:
         response = groups_for_section.users_in_section(section_id, next_page_url)
 
-    except requests.exceptions.RequestException as e:
+    except (requests.exceptions.RequestException, Exception) as e:
         logging.exception('getting USERS list has erroneous response ' + e.message)
-        return
+        return None
 
     if not handle_request_if_failed(response):
-        return
+        return None
 
     user_list = json.loads(response.text)
 
@@ -138,12 +139,12 @@ def create_group(groups_for_section, group_category_id, group_name, course_id):
     logging.debug(create_group.__name__ + '() called')
     try:
         response = groups_for_section.create_group(group_category_id, group_name, course_id)
-    except requests.exceptions.RequestException as e:
+    except (requests.exceptions.RequestException, Exception) as e:
         logging.exception('creating a GROUP has erroneous response ' + e.message)
         return None
 
     if not handle_request_if_failed(response):
-        return
+        return None
 
     group = json.loads(response.text)
     return str(group['id'])
@@ -165,12 +166,12 @@ def add_users_to_group(groups_for_section, group_id, user):
     try:
         response = groups_for_section.add_users_to_group(group_id, user)
 
-    except requests.exceptions.RequestException as e:
+    except (requests.exceptions.RequestException, Exception) as e:
         logging.exception('adding USER to group has erroneous response ' + e.message)
         return None
 
     if not handle_request_if_failed(response):
-        return
+        return None
 
     membership = json.loads(response.text)
     return membership['id']
@@ -208,7 +209,8 @@ def main():
     logging.debug('args: ' + str(sys.argv))
 
     if len(sys.argv) is not 3:
-        logging.error("Some of the command line arguments (path to properties files) are not provided")
+        logging.error("Some of the command line arguments (path to properties files) are missing should be like "
+                      "'python groupsforsections.py /config.yaml /security.yaml'")
         sys.exit(1)
     config_file = sys.argv[1]
     security_file = sys.argv[2]
@@ -296,27 +298,26 @@ def main():
         # mapping all the users in a sections to corresponding group
         groups_to_users_dict[group_id] = users
 
-    failed_groups_to_users_dict={}
-    success_groups_to_users_dict={}
+    failed_groups_to_users_dict=defaultdict(list)
+    success_groups_to_users_dict=defaultdict(list)
 
     # adding users to the group
-    for group in groups_to_users_dict:
-        for user in groups_to_users_dict[group]:
+    for group, users in groups_to_users_dict.items():
+        for user in users:
             membership_id = add_users_to_group(groups_for_section_class, group, user)
             if membership_id is None:
                 logging.error('The user %s is not added to the group %s' % (user, group))
-                failed_groups_to_users_dict.setdefault(group, []).append(user)
+                failed_groups_to_users_dict[group].append(user)
             else:
-                success_groups_to_users_dict.setdefault(group, []).append(user)
+                success_groups_to_users_dict[group].append(user)
                 logging.info('The User %s got added to the Group %s  with membership id  %s ' %(user, group, str(membership_id)))
 
-    # Logging total users that belongs to corresponding group
+    # logging total users that belongs to corresponding group
     logging.info("**** Total Users List in a Group set: ")
     for group in groups_to_users_dict:
         logging.info('%d users should be added to the group %s' % (len(groups_to_users_dict[group]), group))
 
     # logging the total successful users added to the each group
-
     if success_groups_to_users_dict:
         logging.info("**** Successful Addition of Users to Groups: ")
         for group in success_groups_to_users_dict:

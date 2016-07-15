@@ -186,7 +186,7 @@ class GroupsForSections:
                 logging.info('Link headers: ' + str(response.links))
             elif request_type == self.HTTP_METHOD_POST:
                 response = requests.post(url, headers=headers)
-        except requests.exceptions.RequestException as request_exception:
-            raise request_exception
+        except (requests.exceptions.RequestException, Exception) as exception:
+            raise exception
 
         return response
