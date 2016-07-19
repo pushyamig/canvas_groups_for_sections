@@ -19,7 +19,7 @@ in the course and create one group for each section and add all the users in eac
 3. To install the required modules for the utility do `pip install -r requirements.txt` 
     * To install modules to a user specific directory then do `pip install --user -r requirements.txt` and also set the environment variable as `PYTHONUSERBASE=/path/to/download/modules`.
     * To download modules to default users home directory as part of Python system path just do `pip install --user -r requirements.txt`. 
-4. Add appropriate properties to the `config.yaml` as show in the template under `config/config.yaml` and could be placed out side of source code.
+4. Add appropriate properties to the `config.yaml` and `security.yaml` as show in the template under `config/config.yaml`, `config/security.yaml` and could be placed out side of source code.
 5. Logging configurations are in `logging.yaml` the file can be present out side of the source code. The logs can be logged to console or to file. Use the template provided in the `config/logging.yaml` and add
     appropriate path to log file. The log get appended to `log/cgs.log` by default. Recommended keep log file out side of the utility
 ## Run Directions 
