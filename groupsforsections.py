@@ -7,6 +7,7 @@ from canvasapis import GroupsForSections
 import yaml
 from os.path import basename
 from collections import defaultdict
+from os import environ
 
 CONST_CANVAS = 'canvas'
 CONST_COURSE = 'course'
@@ -207,45 +208,56 @@ def main():
     utils.setup_logging()
     logging.info('Script Started')
     logging.debug('args: ' + str(sys.argv))
+    # if the environmental variables are not present then we are making an assumption here that the script is running
+    # locally not in Open shift
+    if not set(('COURSE_ID', 'CATEGORY_NAME')).issubset(environ):
+        if len(sys.argv) is not 3:
+            logging.error(
+                "If running script in OpenShift you may misspelled the Environmental variables COURSE_ID/CATEGORY_NAME "
+                "OR when running script locally command line arguments (path to properties files) are missing should be"
+                " 'python groupsforsections.py /config.yaml /security.yaml'")
+            sys.exit(1)
+        config_file = sys.argv[1]
+        security_file = sys.argv[2]
 
-    if len(sys.argv) is not 3:
-        logging.error("Some of the command line arguments (path to properties files) are missing should be like "
-                      "'python groupsforsections.py /config.yaml /security.yaml'")
-        sys.exit(1)
-    config_file = sys.argv[1]
-    security_file = sys.argv[2]
+        logging.debug('reading the file %s ' % basename(security_file))
 
-    logging.debug('reading the file %s ' % basename(security_file))
+        with open(security_file, 'r') as yml_file:
+            sf = yaml.load(yml_file)
 
-    with open(security_file, 'r') as yml_file:
-        sf = yaml.load(yml_file)
+        if not sf or CONST_CANVAS not in sf:
+            logging.error('The key \'canvas\' is missing ')
+            sys.exit(1)
 
-    if not sf or CONST_CANVAS not in sf:
-        logging.error('The key \'canvas\' is missing ')
-        sys.exit(1)
+        logging.debug('reading the file %s ' % basename(config_file))
 
-    logging.debug('reading the file %s ' % basename(config_file))
+        with open(config_file, 'r') as yml_file:
+            cfg = yaml.load(yml_file)
 
-    with open(config_file, 'r') as yml_file:
-        cfg = yaml.load(yml_file)
+        if not cfg or CONST_COURSE not in cfg:
+            logging.error('The key \'course\' is missing ')
+            sys.exit(1)
 
-    if not cfg or CONST_COURSE not in cfg:
-        logging.error('The key \'course\' is missing ')
-        sys.exit(1)
+        if not sf[CONST_CANVAS] or CONST_TOKEN not in sf[CONST_CANVAS] or CONST_URL not in sf[CONST_CANVAS] or \
+                not cfg[CONST_COURSE] or CONST_ID not in cfg[CONST_COURSE] or CONST_GRP_CAT_NAME not in cfg[CONST_COURSE]:
+            logging.error("Some of the keys are missing from the properties files %s:  %s , %s:   %s"
+                          % (basename(security_file), '"canvas keys missing" ' if sf[CONST_CANVAS] is None else sf[CONST_CANVAS].keys(),
+                             basename(config_file), '"course keys missing"' if cfg[CONST_COURSE] is None else cfg[CONST_COURSE].keys()))
+            sys.exit(1)
 
-    if not sf[CONST_CANVAS] or CONST_TOKEN not in sf[CONST_CANVAS] or CONST_URL not in sf[CONST_CANVAS] or \
-            not cfg[CONST_COURSE] or CONST_ID not in cfg[CONST_COURSE] or CONST_GRP_CAT_NAME not in cfg[CONST_COURSE]:
-        logging.error("Some of the keys are missing from the properties files %s:  %s , %s:   %s"
-                      % (basename(security_file), '"canvas keys missing" ' if sf[CONST_CANVAS] is None else sf[CONST_CANVAS].keys(),
-                         basename(config_file), '"course keys missing"' if cfg[CONST_COURSE] is None else cfg[CONST_COURSE].keys()))
-        sys.exit(1)
+        course_id = cfg[CONST_COURSE][CONST_ID]
+        group_category_name = cfg[CONST_COURSE][CONST_GRP_CAT_NAME]
+        canvas_token = sf[CONST_CANVAS][CONST_TOKEN]
+        canvas_url = sf[CONST_CANVAS][CONST_URL]
+    else:
+        course_id = environ['COURSE_ID']
+        group_category_name = environ['CATEGORY_NAME']
+        with open("/usr/local/secret-volume/canvas-url", 'r') as url:
+            canvas_url = url.read()
+        with open("/usr/local/secret-volume/canvas-token", 'r') as token:
+            canvas_token = token.read()
 
-    course_id = cfg[CONST_COURSE][CONST_ID]
-    group_category_name = cfg[CONST_COURSE][CONST_GRP_CAT_NAME]
-    canvas_token = sf[CONST_CANVAS][CONST_TOKEN]
-    canvas_url = sf[CONST_CANVAS][CONST_URL]
-
-    if course_id is None or group_category_name is None or canvas_token is None or canvas_url is None:
+    if not course_id or not group_category_name or not canvas_token or not canvas_url:
         logging.error("some of the configurations from properties file are missing: "
                       "course_id = " + str(course_id) + " ; group_category_name = " + str(group_category_name) +
                       " ; canvas_url = " + str(canvas_url) + " ;  canvas_token = " +

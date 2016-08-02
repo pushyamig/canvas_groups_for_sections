@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Pod
+metadata:
+# this value should be differernt when running script again, as each time a script is run a new Pod is created
+  name: pod1
+spec:
+  containers:
+  - name: barepod
+  # Docker image name
+    image: 172.30.223.233:5000/sample-project/batch-cgs
+    command: ["python", "groupsforsections.py"]
+    env:
+    # the below 2 are environmental variables in Open Shift
+    - name: COURSE_ID
+      value: "6"
+    - name: CATEGORY_NAME
+      value: "Seven"
+    volumeMounts:
+    # name must match the volume name below
+    - name: secret-volume
+    # the data properties(i.e., canvas_token) in the secrets.yaml will be stored in that path.
+      mountPath: /usr/local/secret-volume
+  restartPolicy: Never
+  volumes:
+  - name: secret-volume
+    secret:
+    # the "secretName" should match the "name" attribute in the secrets.yaml.
+    # you can have as many secrets files, to link the secrets while running the batch script this property is useful
+      secretName: dev-secrets
